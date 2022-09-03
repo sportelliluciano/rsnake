@@ -1,16 +1,18 @@
 extern crate rand;
 
-use crate::graphics::Graphics;
 use crate::events::Events;
+use crate::graphics::Graphics;
 
-use std::collections::VecDeque;
 use rand::Rng;
+use std::collections::VecDeque;
 
-const DIR_NONE: u32 = 0;
-const DIR_LEFT: u32 = 1;
-const DIR_RIGHT: u32 = 2;
-const DIR_UP: u32 = 3;
-const DIR_DOWN: u32 = 4;
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+}
 
 const STEP_TIME: u32 = 250;
 
@@ -18,8 +20,8 @@ pub struct Game {
     snake: VecDeque<(i32, i32)>,
     map_size: (i32, i32),
     fruit_pos: (i32, i32),
-    direction: u32,
-    new_direction: u32,
+    direction: Option<Direction>,
+    new_direction: Option<Direction>,
     time_ms: u32,
     next_step_ms: u32,
     pub game_over: bool,
@@ -31,15 +33,15 @@ impl Game {
         let mut game = Game {
             snake: VecDeque::new(),
             map_size: (map_width, map_height),
-            fruit_pos: (map_width-1, map_height-1),
-            direction: DIR_NONE,
-            new_direction: DIR_NONE,
+            fruit_pos: (map_width - 1, map_height - 1),
+            direction: None,
+            new_direction: None,
             time_ms: 0,
             next_step_ms: 0,
             game_over: false,
-            is_win: false
+            is_win: false,
         };
-        game.snake.push_back((0,0));
+        game.snake.push_back((0, 0));
         game
     }
 
@@ -88,34 +90,32 @@ impl Game {
     }
 
     fn read_new_direction(&mut self, events: &mut Events) {
-        if events.key_down && self.direction != DIR_UP {
-            self.new_direction = DIR_DOWN;
-        } else if events.key_up && self.direction != DIR_DOWN {
-            self.new_direction = DIR_UP;
-        } else if events.key_left && self.direction != DIR_RIGHT {
-            self.new_direction = DIR_LEFT;
-        } else if events.key_right && self.direction != DIR_LEFT {
-            self.new_direction = DIR_RIGHT;
+        if events.key_down && self.direction != Some(Direction::Up) {
+            self.new_direction = Some(Direction::Down);
+        } else if events.key_up && self.direction != Some(Direction::Down) {
+            self.new_direction = Some(Direction::Up);
+        } else if events.key_left && self.direction != Some(Direction::Right) {
+            self.new_direction = Some(Direction::Left);
+        } else if events.key_right && self.direction != Some(Direction::Left) {
+            self.new_direction = Some(Direction::Right);
         }
     }
 
     fn update_snake_direction(&mut self) {
-        if self.new_direction != DIR_NONE {
-            self.direction = self.new_direction;
-            self.new_direction = DIR_NONE;
+        if let Some(new_direction) = self.new_direction.take() {
+            self.direction = Some(new_direction);
         }
     }
 
     fn calculate_new_head(&self) -> (i32, i32) {
-        let mut position = *self.snake.front().unwrap();
+        let (x, y) = self.snake[0];
         match self.direction {
-            DIR_RIGHT => position.0 += 1,
-            DIR_DOWN  => position.1 += 1,
-            DIR_LEFT  => position.0 -= 1,
-            DIR_UP    => position.1 -= 1,
-            _ => {}
+            Some(Direction::Right) => (x + 1, y),
+            Some(Direction::Down) => (x, y + 1),
+            Some(Direction::Left) => (x - 1, y),
+            Some(Direction::Up) => (x, y - 1),
+            None => (x, y),
         }
-        return position;
     }
 
     fn is_on_fruit(&self, position: (i32, i32)) -> bool {
@@ -152,20 +152,16 @@ impl Game {
     }
 
     fn is_out_of_map(&self, position: (i32, i32)) -> bool {
-        position.0 >= self.map_size.0 ||
-        position.0 < 0 ||
-        position.1 >= self.map_size.1 ||
-        position.1 < 0
+        let (x, y) = position;
+        let (map_width, map_height) = self.map_size;
+
+        x >= map_width || x < 0 || y >= map_height || y < 0
     }
 
     fn is_in_snake(&self, position: (i32, i32)) -> bool {
-        for snake_segment in self.snake.iter() {
-            if position == *snake_segment {
-                return true;
-            }
-        }
-
-        return false;
+        self.snake
+            .iter()
+            .any(|snake_segment| *snake_segment == position)
     }
 
     fn draw_snake(&self, graphics: &mut Graphics) {
